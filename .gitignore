@@ -1,0 +1,13 @@
+# See https://help.github.com/ignore-files/ for more about ignoring files.
+
+# Custom Ignore
+__pycache__/
+
+# Ignore Filename Extensions
+*.json
+*.asv
+
+# VSCode
+.vscode/*
+.vs/*
+*.code-workspace
