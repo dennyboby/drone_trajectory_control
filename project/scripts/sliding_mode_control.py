@@ -122,9 +122,9 @@ class Quadrotor():
 
     def traj_evaluate(self):
         # TODO: evaluating the corresponding trajectories designed in Part 1 to return the desired positions, velocities and accelerations
-        desired_p = 0
-        desired_v = 0
-        desired_a = 0
+        desired_p = np.array([[0],[0],[0]])
+        desired_v = np.array([[0],[0],[0]])
+        desired_a = np.array([[0],[0],[0]])
         print("Time: ", self.t)
         if self.t == None:
             print("Time is None")
@@ -146,7 +146,6 @@ class Quadrotor():
     def smc_control(self, xyz, xyz_dot, rpy, rpy_dot):
         # obtain the desired values by evaluating the corresponding trajectories
         d_pos, d_vel, d_acc = self.traj_evaluate()
-        # print(d_pos[0][0], d_vel[0][0], d_acc[0][0], d_pos[1][0], d_vel[1][0], d_acc[1][0], d_pos[2][0], d_vel[2][0], d_acc[2][0])
         # TODO: implement the Sliding Mode Control laws designed in Part 2 to calculate the control inputs "u"
         # REMARK: wrap the roll-pitch-yaw angle errors to [-pi to pi]
         Fx = self.mass*(-Kp*(xyz[0,0] - d_pos[0,0]) - Kd*(xyz_dot[0,0] - d_vel[0,0]) + d_acc[0,0])
@@ -225,7 +224,7 @@ class Quadrotor():
     # save the actual trajectory data
     def save_data(self):
         # TODO: update the path below with the correct path
-        with open("/home/sfarzan/rbe502_project/src/project/scripts/log.pkl", "wb") as fp:
+        with open("log.pkl", "wb") as fp:
             self.mutex_lock_on = True
             pickle.dump([self.t_series,self.x_series,self.y_series,self.z_series], fp)
 
