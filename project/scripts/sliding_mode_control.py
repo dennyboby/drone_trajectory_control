@@ -12,6 +12,18 @@ from geometry_msgs.msg import Twist, Pose2D
 import pickle
 import os
 
+# TUNEABLE PARAMETERS:
+Kp = 85
+Kd = 8
+lambd_z = 4
+lambd_roll = 7
+lambd_pitch = 7
+lambd_yaw = 4
+k_z = 7
+k_roll = 100
+k_pitch = 100
+k_yaw = 25
+
 class Quadrotor():
     def __init__(self):
         # publisher for rotor speeds
@@ -31,6 +43,28 @@ class Quadrotor():
         self.waypoints_time = np.array([0, 5, 20, 35, 50, 65])
         self.vel = np.array([0, 0, 0])
         self.acc = np.array([0, 0, 0])
+        self.mass = 0.027
+        self.g = 9.81
+        self.kF = 1.28192*(10**(-8))
+        self.kM = 5.964552*(10**(-3))
+        self.l = 0.046
+        self.Ix = 16.5717*(10**(-6))
+        self.Iy = 16.5717*(10**(-6))
+        self.Iz = 29.261652*(10**(-6))
+        self.Ip = 12.65625*(10**(-8))
+        self.rotor_max = 2618
+        self.rotor_min = 0
+        # Initial u
+        self.u1 = 0.01
+        self.u2 = 0.01
+        self.u3 = 0.01
+        self.u4 = 0.01
+
+        self.w = self.motor_speeds(self.u1, self.u2, self.u3, self.u4)
+        self.w1 = self.w[0]
+        self.w2 = self.w[1]
+        self.w3 = self.w[2]
+        self.w4 = self.w[3]
 
 
     def quinticpoly(self, t0, tf, q0, q0_dot, q0_ddot, qf, qf_dot, qf_ddot):
@@ -43,6 +77,33 @@ class Quadrotor():
                       [0,  0,     2,    6*tf, 12*tf**2, 20*tf**3]])
         a = np.matmul(np.linalg.inv(A),b)
         return a
+
+    def motor_speeds(self, u1, u2, u3, u4):
+        AM = np.array([ [1/(4*self.kF),  -sqrt(2)/(4*self.kF*self.l),   -sqrt(2)/(4*self.kF*self.l),   -1/(4*self.kM*self.kF)],
+                        [1/(4*self.kF),  -sqrt(2)/(4*self.kF*self.l),   sqrt(2)/(4*self.kF*self.l),    1/(4*self.kM*self.kF)],
+                        [1/(4*self.kF),  sqrt(2)/(4*self.kF*self.l),    sqrt(2)/(4*self.kF*self.l),    -1/(4*self.kM*self.kF)],
+                        [1/(4*self.kF),  sqrt(2)/(4*self.kF*self.l),    -sqrt(2)/(4*self.kF*self.l),   1/(4*self.kM*self.kF)]       
+                        ])
+        U = np.array([u1, u2, u3, u4])
+        return (np.sqrt(self.only_pos(np.dot(AM,U))))
+
+    def limit_speed(self, speed, lower_limit, upper_limit):
+        if (speed <= lower_limit):
+            speed = lower_limit
+        elif (speed > upper_limit):
+            speed = upper_limit
+        return speed
+
+    # Saturation function
+    def sat(self, surface, phi=0.2):
+        return min(max(surface/phi,-1),1)
+
+    def only_pos(self, z):
+        return(np.maximum(0,z))
+
+    def wrap_to_pi(self, angle):
+        angle = atan2(sin(angle), cos(angle))
+        return angle 
 
     def generate_trajectory(self, t0, tf, pos_i, vel_i, acc_i, pos_f, vel_f, acc_f):
         x_coeff = self.quinticpoly(t0, tf, pos_i[0], vel_i[0], acc_i[0], pos_f[0], vel_f[0], acc_f[0])
@@ -61,9 +122,10 @@ class Quadrotor():
 
     def traj_evaluate(self):
         # TODO: evaluating the corresponding trajectories designed in Part 1 to return the desired positions, velocities and accelerations
-        desired_p = None
-        desired_v = None
-        desired_a = None
+        desired_p = 0
+        desired_v = 0
+        desired_a = 0
+        print("Time: ", self.t)
         if self.t == None:
             print("Time is None")
             return desired_p, desired_v, desired_a
@@ -87,12 +149,48 @@ class Quadrotor():
         # print(d_pos[0][0], d_vel[0][0], d_acc[0][0], d_pos[1][0], d_vel[1][0], d_acc[1][0], d_pos[2][0], d_vel[2][0], d_acc[2][0])
         # TODO: implement the Sliding Mode Control laws designed in Part 2 to calculate the control inputs "u"
         # REMARK: wrap the roll-pitch-yaw angle errors to [-pi to pi]
+        Fx = self.mass*(-Kp*(xyz[0,0] - d_pos[0,0]) - Kd*(xyz_dot[0,0] - d_vel[0,0]) + d_acc[0,0])
+        Fy = self.mass*(-Kp*(xyz[1,0] - d_pos[1,0]) - Kd*(xyz_dot[1,0] - d_vel[1,0]) + d_acc[1,0])
+
+        d_roll = np.arcsin(-Fy/self.u1)
+        d_pitch = np.arcsin(Fx/self.u1)
+        d_yaw = 0
+
+        d_droll = d_dpitch = d_dyaw = 0
+        d_ddroll = d_ddpitch = d_ddyaw = 0
+
+        error_z = xyz[2,0] - d_pos[2,0]
+        error_roll = self.wrap_to_pi(rpy[0,0] - d_roll)
+        error_pitch = self.wrap_to_pi(rpy[1,0] - d_pitch)
+        error_yaw = self.wrap_to_pi(rpy[2,0] - d_yaw)
+
+        derror_z = xyz_dot[2,0] - d_vel[2,0]
+        derror_roll = rpy_dot[0,0] - d_droll
+        derror_pitch = rpy_dot[1,0] - d_dpitch
+        derror_yaw = rpy_dot[2,0] - d_dyaw
+
+        omega = self.w1 - self.w2 + self.w3 - self.w4
+        
+        surface_z = derror_z + lambd_z*error_z
+        surface_roll = derror_roll + lambd_roll*error_roll
+        surface_pitch = derror_pitch + lambd_pitch*error_pitch
+        surface_yaw = derror_yaw + lambd_yaw*error_yaw
+
+        self.u1 = (self.mass *(self.g + d_acc[2,0] - lambd_z*derror_z - k_z*self.sat(surface_z, phi=1) ) ) / (cos(rpy[0,0])*cos(rpy[1,0]))
+        self.u2 =  (-rpy_dot[1,0]*rpy_dot[2,0]*(self.Iy - self.Iz)) + (self.Ip*omega*rpy_dot[1,0]) + (self.Ix*d_ddroll) - (lambd_roll*self.Ix*derror_roll) - (self.Ix*k_roll*self.sat(surface_roll)) 
+        self.u3 = (-rpy_dot[0,0]*rpy_dot[2,0]*(self.Iz-self.Ix)) - (self.Ip*omega*rpy_dot[0,0]) + (self.Iy*d_ddpitch) - (lambd_pitch*self.Iy*derror_pitch) - (self.Iy*k_pitch*self.sat(surface_pitch))
+        self.u4 = (-rpy_dot[0,0]*rpy_dot[1,0]*(self.Ix-self.Iy)) + (self.Iz*d_ddyaw) - (lambd_yaw*self.Iz*derror_yaw) - (k_yaw*self.Iz*self.sat(surface_yaw))
         # TODO: convert the desired control inputs "u" to desired rotor velocities "motor_vel" by using the "allocation matrix"
+        motor_vel = self.motor_speeds(self.u1, self.u2, self.u3, self.u4)
         # TODO: maintain the rotor velocities within the valid range of [0 to 2618]
+        motor_vel[0] = self.limit_speed(motor_vel[0], self.rotor_min, self.rotor_max)
+        motor_vel[1] = self.limit_speed(motor_vel[1], self.rotor_min, self.rotor_max)
+        motor_vel[2] = self.limit_speed(motor_vel[2], self.rotor_min, self.rotor_max)
+        motor_vel[3] = self.limit_speed(motor_vel[3], self.rotor_min, self.rotor_max)
         # publish the motor velocities to the associated ROS topic
-        # motor_speed = Actuators()
-        # motor_speed.angular_velocities = [motor_vel[0,0], motor_vel[1,0], motor_vel[2,0], motor_vel[3,0]]
-        # self.motor_speed_pub.publish(motor_speed)
+        motor_speed = Actuators()
+        motor_speed.angular_velocities = [motor_vel[0], motor_vel[1], motor_vel[2], motor_vel[3]]
+        self.motor_speed_pub.publish(motor_speed)
 
     # odometry callback function (DO NOT MODIFY)
     def odom_callback(self, msg):
