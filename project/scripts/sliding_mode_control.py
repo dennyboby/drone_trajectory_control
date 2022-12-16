@@ -95,8 +95,8 @@ class Quadrotor():
         return speed
 
     # Saturation function
-    def sat(self, surface, phi=0.2):
-        return min(max(surface/phi,-1),1)
+    def sat(self, surface, a=0.2):
+        return min(max(surface/a,-1),1)
 
     def only_pos(self, z):
         return(np.maximum(0,z))
@@ -175,7 +175,7 @@ class Quadrotor():
         surface_pitch = derror_pitch + lambd_pitch*error_pitch
         surface_yaw = derror_yaw + lambd_yaw*error_yaw
 
-        self.u1 = (self.mass *(self.g + d_acc[2,0] - lambd_z*derror_z - k_z*self.sat(surface_z, phi=1) ) ) / (cos(rpy[0,0])*cos(rpy[1,0]))
+        self.u1 = (self.mass *(self.g + d_acc[2,0] - lambd_z*derror_z - k_z*self.sat(surface_z, a=1) ) ) / (cos(rpy[0,0])*cos(rpy[1,0]))
         self.u2 =  (-rpy_dot[1,0]*rpy_dot[2,0]*(self.Iy - self.Iz)) + (self.Ip*omega*rpy_dot[1,0]) + (self.Ix*d_ddroll) - (lambd_roll*self.Ix*derror_roll) - (self.Ix*k_roll*self.sat(surface_roll)) 
         self.u3 = (-rpy_dot[0,0]*rpy_dot[2,0]*(self.Iz-self.Ix)) - (self.Ip*omega*rpy_dot[0,0]) + (self.Iy*d_ddpitch) - (lambd_pitch*self.Iy*derror_pitch) - (self.Iy*k_pitch*self.sat(surface_pitch))
         self.u4 = (-rpy_dot[0,0]*rpy_dot[1,0]*(self.Ix-self.Iy)) + (self.Iz*d_ddyaw) - (lambd_yaw*self.Iz*derror_yaw) - (k_yaw*self.Iz*self.sat(surface_yaw))
