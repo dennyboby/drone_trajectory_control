@@ -50,5 +50,6 @@ Open another new terminal and run the following commands:
 
 ## 4. Output
 This section shows the output of the simulation.
+
 https://user-images.githubusercontent.com/44564963/221396390-b6882497-a9f5-4c67-9fb5-9442ebae4c5f.mp4
 
